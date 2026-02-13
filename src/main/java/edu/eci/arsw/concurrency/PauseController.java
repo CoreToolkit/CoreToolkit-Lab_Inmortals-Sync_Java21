@@ -7,18 +7,57 @@ import java.util.concurrent.TimeUnit;
 public final class PauseController {
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition unpaused = lock.newCondition();
+  private final Condition allPaused = lock.newCondition();
+  
   private volatile boolean paused = false;
   private volatile boolean shuttingDown = false;
+  private int pausedCount = 0;
+  private int runningCount = 0;
 
-  public void pause() {
+  
+  public void registerThread() {
     lock.lock();
     try {
-      paused = true;
+      runningCount++;
     } finally {
       lock.unlock();
     }
   }
 
+  public void unregisterThread() {
+    lock.lock();
+    try {
+      runningCount--;
+      if (paused && pausedCount >= runningCount) {
+        allPaused.signalAll();
+      }
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  public void pause() throws InterruptedException {
+    lock.lock();
+    try {
+      paused = true;
+      pausedCount = 0;
+
+      long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(500);
+      while (pausedCount < runningCount && !shuttingDown) {
+        long remaining = deadline - System.nanoTime();
+        if (remaining <= 0) {
+          break;
+        }
+        allPaused.await(remaining, TimeUnit.NANOSECONDS);
+      }
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /**
+   * Reanuda todos los hilos pausados.
+   */
   public void resume() {
     lock.lock();
     try {
@@ -34,30 +73,31 @@ public final class PauseController {
   }
 
   public void shutdown() {
-    shuttingDown = true;
-    resume();
-  }
-
-  public void awaitIfPaused() throws InterruptedException {
-    if (shuttingDown) return;
-    lock.lockInterruptibly();
+    lock.lock();
     try {
-      while (paused && !shuttingDown) {
-        unpaused.await(100, TimeUnit.MILLISECONDS);
-      }
+      shuttingDown = true;
+      paused = false;
+      unpaused.signalAll();
+      allPaused.signalAll();
     } finally {
       lock.unlock();
     }
   }
 
-  public void awaitIfPaused(long timeout, TimeUnit unit) throws InterruptedException {
+  
+  public void awaitIfPaused() throws InterruptedException {
     if (shuttingDown) return;
+    
     lock.lockInterruptibly();
     try {
       while (paused && !shuttingDown) {
-        if (!unpaused.await(timeout, unit)) {
-          break;
+        if (pausedCount < runningCount) {
+          pausedCount++;
+          if (pausedCount >= runningCount) {
+            allPaused.signalAll();
+          }
         }
+        unpaused.await();
       }
     } finally {
       lock.unlock();
