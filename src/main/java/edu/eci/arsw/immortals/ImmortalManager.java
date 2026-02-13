@@ -56,7 +56,11 @@ public final class ImmortalManager implements AutoCloseable {
   }
 
   public void pause() {
-    controller.pause();
+    try {
+      controller.pause();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   public void resume() {
@@ -65,7 +69,7 @@ public final class ImmortalManager implements AutoCloseable {
 
   public void stop() {
     running = false;
-    controller.resume();
+    controller.shutdown();  
     for (Immortal im : population) {
       im.stop();
     }

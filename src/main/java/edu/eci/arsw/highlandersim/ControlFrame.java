@@ -77,15 +77,9 @@ public final class ControlFrame extends JFrame {
   }
 
   private void onPauseAndCheck(ActionEvent e) {
+    int damage = (Integer) damageSpinner.getValue();
     if (manager == null) return;
     manager.pause();
-
-    try {
-      Thread.sleep(50);
-    } catch (InterruptedException ex) {
-      Thread.currentThread().interrupt();
-    }
-
     List<Immortal> pop = manager.populationSnapshot();
     long sum = 0;
     int alive = 0;
@@ -114,7 +108,7 @@ public final class ControlFrame extends JFrame {
     long healthLost = expectedTotal - sum;
 
     sb.append("----------------------------------------\n");
-    sb.append(String.format("Total Health: %d (Expected: %d)%n", sum, expectedTotal));
+    sb.append(String.format("Total Health: %d (Expected: %d)%n", sum, expectedTotal - (manager.scoreBoard().totalFights() * (damage /2))));
     sb.append(String.format("Health Lost: %d%n", healthLost));
     sb.append(String.format("Alive: %d | Dead: %d%n", alive, dead));
     sb.append(String.format("Fights: %d%n", manager.scoreBoard().totalFights()));
