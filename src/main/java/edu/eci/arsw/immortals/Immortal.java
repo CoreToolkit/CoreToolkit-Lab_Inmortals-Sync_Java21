@@ -1,14 +1,14 @@
 package edu.eci.arsw.immortals;
 
 import edu.eci.arsw.concurrency.PauseController;
-
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class Immortal implements Runnable {
   private final String name;
-  private int health;
+  private final AtomicInteger health;
   private final int damage;
   private final List<Immortal> population;
   private final ScoreBoard scoreBoard;
@@ -17,7 +17,7 @@ public final class Immortal implements Runnable {
 
   public Immortal(String name, int health, int damage, List<Immortal> population, ScoreBoard scoreBoard, PauseController controller) {
     this.name = Objects.requireNonNull(name);
-    this.health = health;
+    this.health = new AtomicInteger(health);
     this.damage = damage;
     this.population = Objects.requireNonNull(population);
     this.scoreBoard = Objects.requireNonNull(scoreBoard);
@@ -25,11 +25,13 @@ public final class Immortal implements Runnable {
   }
 
   public String name() { return name; }
-  public synchronized int getHealth() { return health; }
-  public boolean isAlive() { return getHealth() > 0 && running; }
+  public int getHealth() { return health.get(); }
+  public boolean isAlive() { return health.get() > 0 && running; }
   public void stop() { running = false; }
 
-  @Override public void run() {
+  @Override
+  public void run() {
+    controller.registerThread();  
     try {
       while (running) {
         controller.awaitIfPaused();
@@ -43,25 +45,28 @@ public final class Immortal implements Runnable {
       }
     } catch (InterruptedException ie) {
       Thread.currentThread().interrupt();
+    } finally {
+      controller.unregisterThread();  
     }
   }
 
   private Immortal pickOpponent() {
     if (population.size() <= 1) return null;
     Immortal other;
+    int attempts = 0;
+    int maxAttempts = population.size() * 2;
     do {
       other = population.get(ThreadLocalRandom.current().nextInt(population.size()));
-    } while (other == this);
+      attempts++;
+      if (attempts > maxAttempts) return null;
+    } while (other == this || !other.isAlive());
     return other;
   }
 
   private void fightNaive(Immortal other) {
     synchronized (this) {
       synchronized (other) {
-        if (this.health <= 0 || other.health <= 0) return;
-        other.health -= this.damage;
-        this.health += this.damage / 2;
-        scoreBoard.recordFight();
+        executeFight(other);
       }
     }
   }
@@ -71,11 +76,26 @@ public final class Immortal implements Runnable {
     Immortal second = this.name.compareTo(other.name) < 0 ? other : this;
     synchronized (first) {
       synchronized (second) {
-        if (this.health <= 0 || other.health <= 0) return;
-        other.health -= this.damage;
-        this.health += this.damage / 2;
-        scoreBoard.recordFight();
+        executeFight(other);
       }
+    }
+  }
+
+  private void executeFight(Immortal other) {
+    if (this.health.get() <= 0 || other.health.get() <= 0) {
+      return;
+    }
+
+    int otherHealth = other.health.get();
+    int actualDamage = Math.min(this.damage, otherHealth);
+
+    other.health.addAndGet(-actualDamage);
+    this.health.addAndGet(actualDamage / 2);
+    scoreBoard.recordFight();
+
+    if (other.health.get() <= 0) {
+      other.health.set(0);
+      other.running = false;
     }
   }
 }
