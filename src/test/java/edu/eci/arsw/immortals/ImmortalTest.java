@@ -275,4 +275,106 @@ public class ImmortalTest {
         testManager.stop();
         System.out.println("PRUEBA SALUD NEGATIVA PASO\n");
     }
+
+    @Test
+    public void testSaludNuncaAumentaGlobalmente() throws InterruptedException {
+        System.out.println("=== PRUEBA EXTRA 1: Salud nunca aumenta globalmente ===");
+
+        manager.start();
+        Thread.sleep(500);
+        controller.pause();
+
+        long health1 = manager.totalHealth();
+        controller.resume();
+
+        Thread.sleep(500);
+        controller.pause();
+
+        long health2 = manager.totalHealth();
+
+        assertTrue("La salud total nunca debe aumentar", health2 <= health1);
+
+        System.out.println("PRUEBA EXTRA 1 PASO\n");
+        controller.resume();
+    }
+
+    @Test
+    public void testPoblacionNoCrece() throws InterruptedException {
+        System.out.println("=== PRUEBA EXTRA 2: Poblacion estable ===");
+
+        int initialSize = manager.populationSnapshot().size();
+        manager.start();
+        Thread.sleep(1000);
+        controller.pause();
+
+        int currentSize = manager.populationSnapshot().size();
+
+        assertTrue("La poblacion no debe crecer", currentSize <= initialSize);
+
+        System.out.println("PRUEBA EXTRA 2 PASO\n");
+        controller.resume();
+    }
+
+    @Test
+    public void testPausasRepetidas() throws InterruptedException {
+        System.out.println("=== PRUEBA EXTRA 3: Pausas repetidas ===");
+
+        manager.start();
+
+        for (int i = 0; i < 5; i++) {
+            controller.pause();
+            long h1 = manager.totalHealth();
+            Thread.sleep(100);
+            long h2 = manager.totalHealth();
+            assertEquals(h1, h2);
+            controller.resume();
+            Thread.sleep(100);
+        }
+
+        manager.stop();
+        System.out.println("PRUEBA EXTRA 3 PASO\n");
+    }
+
+    @Test
+    public void testNaiveTieneMenorProgreso() throws InterruptedException {
+        System.out.println("=== PRUEBA EXTRA 4: Naive tiene menos progreso ===");
+
+        ImmortalManager naive = new ImmortalManager(100, "naive", 100, 10);
+        naive.start();
+        Thread.sleep(1500);
+        naive.pause();
+        long fightsNaive = naive.scoreBoard().totalFights();
+        naive.stop();
+
+        ImmortalManager ordered = new ImmortalManager(100, "ordered", 100, 10);
+        ordered.start();
+        Thread.sleep(1500);
+        ordered.pause();
+        long fightsOrdered = ordered.scoreBoard().totalFights();
+        ordered.stop();
+
+        assertTrue("Ordered deberia progresar mas que naive",
+                fightsOrdered >= fightsNaive);
+
+        System.out.println("PRUEBA EXTRA 4 PASO\n");
+    }
+
+    @Test
+    public void testStopCongelaEstado() throws InterruptedException {
+        System.out.println("=== PRUEBA EXTRA 5: Stop congela estado ===");
+
+        manager.start();
+        Thread.sleep(500);
+        manager.stop();
+
+        long h1 = manager.totalHealth();
+        Thread.sleep(500);
+        long h2 = manager.totalHealth();
+
+        assertEquals("La salud no debe cambiar despues de stop", h1, h2);
+
+        System.out.println("PRUEBA EXTRA 5 PASO\n");
+    }
+
+
 }
